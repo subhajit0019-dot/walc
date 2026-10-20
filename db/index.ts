@@ -14,8 +14,6 @@ function createDatabaseConnection() {
     process.env.POSTGRES_URL ||
     "postgresql://placeholder:placeholder@ep-placeholder.us-east-1.aws.neon.tech/neondb?sslmode=require";
 
-  // Optimize for serverless latency
-  neonConfig.fetchConnectionCache = true;
   const sql = neon(connectionString);
   return drizzle(sql, { schema });
 }
