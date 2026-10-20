@@ -207,7 +207,7 @@ export function ClientTable({ initialClients }: { initialClients: ClientItem[] }
                       <div className="flex items-center justify-end gap-2">
                         <a
                           href={`/api/download/${client.id}`}
-                          title="Direct Download EXE"
+                          title="Export Client Config JSON"
                           className={
                             client.status !== "active"
                               ? "pointer-events-none opacity-40"

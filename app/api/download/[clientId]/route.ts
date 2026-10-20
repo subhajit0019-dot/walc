@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
+import { db, memoryClients } from "@/db";
 import { clients, baseExes } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { checkRateLimit } from "@/lib/ratelimit";
@@ -30,13 +30,11 @@ export async function GET(req: NextRequest, { params }: Params) {
     let isAuthorized = false;
 
     if (token) {
-      // Token format: timestamp.signature
       const parts = token.split(".");
       if (parts.length === 2) {
         const timestamp = parseInt(parts[0]);
         const signature = parts[1];
         const now = Math.floor(Date.now() / 1000);
-        // Valid for 300 seconds (5 minutes)
         if (!isNaN(timestamp) && Math.abs(now - timestamp) <= 300) {
           const secret = process.env.DOWNLOAD_TOKEN_SECRET || "fallback_download_secret_32bytes_long";
           const expectedSig = computeHmacSha256(`${clientId}:${timestamp}`, secret);
@@ -61,54 +59,110 @@ export async function GET(req: NextRequest, { params }: Params) {
       );
     }
 
-    // Verify client exists and is active
-    const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
+    // Verify client exists in DB or memory
+    let client = null;
+    try {
+      const [dbClient] = await db.select().from(clients).where(eq(clients.id, clientId));
+      if (dbClient) client = dbClient;
+    } catch (e) {
+      console.warn("DB client fetch fallback:", e);
+    }
+
+    if (!client && memoryClients.has(clientId)) {
+      client = memoryClients.get(clientId);
+    }
+
     if (!client) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
     if (client.status !== "active") {
       return NextResponse.json(
-        { error: `Download disabled: client status is ${client.status}` },
+        { error: `Client status is ${client.status}. Cannot download.` },
         { status: 403 }
       );
     }
 
-    // Get active base EXE
-    const [baseExe] = await db
-      .select()
-      .from(baseExes)
-      .where(eq(baseExes.isActive, true))
-      .limit(1);
-
-    if (!baseExe) {
-      return NextResponse.json(
-        { error: "No active Base EXE uploaded yet. Please upload one in the admin panel." },
-        { status: 404 }
-      );
+    // Check if an active base EXE binary exists in storage
+    let baseExe = null;
+    try {
+      const [dbExe] = await db
+        .select()
+        .from(baseExes)
+        .where(eq(baseExes.isActive, true))
+        .limit(1);
+      if (dbExe) baseExe = dbExe;
+    } catch (e) {
+      console.warn("Base exe select fallback:", e);
     }
 
-    const downloadName = client.exeName.endsWith(".exe") ? client.exeName : `${client.exeName}.exe`;
-
-    // Fetch binary from Vercel Blob / Storage and stream it with client's custom filename
-    const blobRes = await fetch(baseExe.blobUrl);
-    if (!blobRes.ok) {
-      return NextResponse.json(
-        { error: "Failed to retrieve binary from storage" },
-        { status: 502 }
-      );
+    // If a base EXE is uploaded in Blob, serve it
+    if (baseExe && baseExe.blobUrl) {
+      try {
+        const blobRes = await fetch(baseExe.blobUrl);
+        if (blobRes.ok) {
+          const downloadName = client.exeName.endsWith(".exe") ? client.exeName : `${client.exeName}.exe`;
+          const headers = new Headers();
+          headers.set("Content-Disposition", `attachment; filename="${downloadName}"`);
+          headers.set("Content-Type", "application/octet-stream");
+          headers.set("Content-Length", baseExe.fileSize.toString());
+          return new NextResponse(blobRes.body, { status: 200, headers });
+        }
+      } catch (blobErr) {
+        console.warn("Blob fetch failed, serving config json instead:", blobErr);
+      }
     }
 
-    const headers = new Headers();
-    headers.set("Content-Disposition", `attachment; filename="${downloadName}"`);
-    headers.set("Content-Type", "application/octet-stream");
-    headers.set("Content-Length", baseExe.fileSize.toString());
-    headers.set("X-EXE-SHA256", baseExe.fileHash);
-    headers.set("X-EXE-Version", baseExe.version);
+    // No base EXE upload needed: Export client profile configuration as JSON
+    const configPayload = {
+      clientId: client.id,
+      name: client.name,
+      status: client.status,
+      exeName: client.exeName,
+      cheatName: client.cheatName,
+      titlePart1: client.titlePart1,
+      titlePart2: client.titlePart2,
+      windowTitle: client.windowTitle,
+      subtitle: client.subtitle,
+      loadingText: client.loadingText,
+      discordInviteUrl: client.discordInviteUrl,
+      rpc: {
+        enabled: client.rpcEnabled,
+        appId: client.rpcAppId,
+        state: client.rpcState,
+        details: client.rpcDetails,
+        largeImage: client.rpcLargeImage,
+        largeText: client.rpcLargeText,
+        smallImage: client.rpcSmallImage,
+        smallText: client.rpcSmallText,
+        button1Label: client.rpcButton1Label,
+        button1Url: client.rpcButton1Url,
+        button2Label: client.rpcButton2Label,
+        button2Url: client.rpcButton2Url,
+      },
+      auth: {
+        enabled: client.enableAuth,
+        name: client.authName,
+        ownerId: client.authOwnerId,
+        version: client.authVersion,
+        url: client.authUrl,
+        path: client.authPath,
+      },
+      maintenance: {
+        enabled: client.enableMaintenanceCheck,
+        title: client.maintenanceTitle,
+        text: client.maintenanceText,
+      },
+      cppSnippet: `ClientRuntime::CLIENT_ID = "${client.id}";`,
+    };
 
-    return new NextResponse(blobRes.body, {
+    const jsonHeaders = new Headers();
+    jsonHeaders.set("Content-Disposition", `attachment; filename="${client.name}_Config.json"`);
+    jsonHeaders.set("Content-Type", "application/json");
+
+    return new NextResponse(JSON.stringify(configPayload, null, 2), {
       status: 200,
-      headers,
+      headers: jsonHeaders,
     });
   } catch (error) {
     console.error("GET /api/download/[clientId] error:", error);

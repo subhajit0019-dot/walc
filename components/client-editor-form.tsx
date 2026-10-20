@@ -185,6 +185,7 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
                   size="icon"
                   className="h-7 w-7 text-slate-400 hover:text-white"
                   onClick={handleCopyId}
+                  title="Copy Client UUID"
                 >
                   {copiedId ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
                 </Button>
@@ -194,6 +195,19 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
             <div className="flex items-center gap-2">
               <Button
                 type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(`ClientRuntime::CLIENT_ID = "${initialData.id}";`);
+                  alert("Copied to clipboard!\n\nPaste this in your C++ ClientConfig.cpp:\nClientRuntime::CLIENT_ID = \"" + initialData.id + "\";");
+                }}
+                className="gap-1.5 text-xs text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/10"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                <span>Copy C++ Code</span>
+              </Button>
+              <Button
+                type="button"
                 variant="glow"
                 size="sm"
                 onClick={handleDownloadExe}
@@ -201,7 +215,7 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
                 className="gap-2 text-xs"
               >
                 <Download className="h-4 w-4" />
-                <span>Download {formData.exeName}</span>
+                <span>Export Config (.json)</span>
               </Button>
               <Button
                 type="button"

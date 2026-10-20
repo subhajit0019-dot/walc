@@ -101,35 +101,28 @@ export default async function DashboardPage() {
       {/* Metrics Row */}
       <StatsCards stats={stats} />
 
-      {/* Base EXE Status Banner */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      {/* Fleet Remote Control Banner */}
+      <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/20 p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
             <Terminal className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-white">Active Base EXE:</span>
+              <span className="text-xs font-semibold text-white">Direct Client UUID Architecture:</span>
               <span className="text-xs font-mono text-cyan-400 font-semibold">
-                {stats.activeBaseExe ? stats.activeBaseExe.filename : "None Uploaded Yet"}
+                Zero EXE Upload Needed
               </span>
-              {stats.activeBaseExe && (
-                <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">
-                  v{stats.activeBaseExe.version}
-                </span>
-              )}
             </div>
-            <p className="text-[11px] font-mono text-slate-500 mt-0.5">
-              {stats.activeBaseExe
-                ? `SHA-256: ${stats.activeBaseExe.fileHash}`
-                : "Upload a base binary in Base EXE Management to enable client downloads."}
+            <p className="text-[11px] font-mono text-slate-400 mt-0.5">
+              Deploy customized client profiles, copy the Client UUID into your C++ build, and remotely control branding & killswitch.
             </p>
           </div>
         </div>
 
-        <Link href="/base-exe">
-          <Button variant="outline" size="sm" className="text-xs">
-            Manage Base EXEs
+        <Link href="/clients/new">
+          <Button variant="outline" size="sm" className="text-xs text-cyan-400 border-cyan-500/40 hover:bg-cyan-500/10">
+            Create Client Profile
           </Button>
         </Link>
       </div>
