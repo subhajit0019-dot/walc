@@ -435,12 +435,12 @@ namespace ClientRuntime
         CustomConfig::DiscordButton2Url = Buffers::s_DiscordButton2Url.c_str();
 
         CustomConfig::EnableAuth = cfg.enableAuth;
-        CustomConfig::AuthName = Buffers::s_AuthName.c_str();
-        CustomConfig::AuthOwnerId = Buffers::s_AuthOwnerId.c_str();
-        CustomConfig::AuthSecret = Buffers::s_AuthSecret.c_str();
-        CustomConfig::AuthVersion = Buffers::s_AuthVersion.c_str();
-        CustomConfig::AuthUrl = Buffers::s_AuthUrl.c_str();
-        CustomConfig::AuthPath = Buffers::s_AuthPath.c_str();
+        if (!Buffers::s_AuthName.empty()) CustomConfig::AuthName = Buffers::s_AuthName.c_str();
+        if (!Buffers::s_AuthOwnerId.empty()) CustomConfig::AuthOwnerId = Buffers::s_AuthOwnerId.c_str();
+        if (!Buffers::s_AuthSecret.empty()) CustomConfig::AuthSecret = Buffers::s_AuthSecret.c_str();
+        if (!Buffers::s_AuthVersion.empty()) CustomConfig::AuthVersion = Buffers::s_AuthVersion.c_str();
+        if (!Buffers::s_AuthUrl.empty()) CustomConfig::AuthUrl = Buffers::s_AuthUrl.c_str();
+        if (!Buffers::s_AuthPath.empty()) CustomConfig::AuthPath = Buffers::s_AuthPath.c_str();
 
         CustomConfig::EnableMaintenanceCheck = cfg.enableMaintenanceCheck;
         CustomConfig::MaintenanceNoticeTitle = Buffers::s_MaintenanceTitle.c_str();
