@@ -57,17 +57,57 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Query client from database or memory
-    let client = null;
-    try {
-      const [dbClient] = await db.select().from(clients).where(eq(clients.id, clientId));
-      if (dbClient) client = dbClient;
-    } catch (e) {
-      console.warn("DB client check lookup fallback:", e);
+    const cleanId = clientId.trim();
+    const cleanExe = cleanId.toLowerCase().endsWith(".exe") ? cleanId : `${cleanId}.exe`;
+    const cleanBase = cleanId.replace(/\.exe$/i, "");
+
+    // 4. Query client from memory or database
+    let client: any = null;
+
+    // Check memory first (fastest)
+    if (memoryClients.size > 0) {
+      for (const mc of memoryClients.values()) {
+        if (
+          mc.id === cleanId ||
+          mc.exeName?.toLowerCase() === cleanExe.toLowerCase() ||
+          mc.exeName?.toLowerCase() === cleanBase.toLowerCase() ||
+          mc.name?.toLowerCase() === cleanBase.toLowerCase() ||
+          mc.cheatName?.toLowerCase() === cleanBase.toLowerCase()
+        ) {
+          client = mc;
+          break;
+        }
+      }
     }
 
-    if (!client && memoryClients.has(clientId)) {
-      client = memoryClients.get(clientId);
+    // Check database if not found in memory
+    if (!client) {
+      try {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+        if (isUuid) {
+          const [dbClient] = await db.select().from(clients).where(eq(clients.id, cleanId));
+          if (dbClient) client = dbClient;
+        } else {
+          // Look up by EXE name or client name (case-insensitive)
+          const dbClients = await db
+            .select()
+            .from(clients)
+            .limit(100);
+
+          client = dbClients.find(
+            (c) =>
+              c.exeName?.toLowerCase() === cleanExe.toLowerCase() ||
+              c.exeName?.toLowerCase() === cleanBase.toLowerCase() ||
+              c.name?.toLowerCase() === cleanBase.toLowerCase() ||
+              c.cheatName?.toLowerCase() === cleanBase.toLowerCase()
+          );
+        }
+        if (client) {
+          memoryClients.set(client.id, client);
+        }
+      } catch (e) {
+        console.warn("DB client check lookup fallback:", e);
+      }
     }
 
     const privateKey =
@@ -76,7 +116,10 @@ export async function POST(req: NextRequest) {
 
     // If client does not exist
     if (!client) {
-      return NextResponse.json({ error: "Client ID not recognized" }, { status: 404 });
+      return NextResponse.json(
+        { error: `Client not recognized for identifier or EXE: '${cleanId}'` },
+        { status: 404 }
+      );
     }
 
     // Check expiry
@@ -85,13 +128,17 @@ export async function POST(req: NextRequest) {
       effectiveStatus = "suspended";
     }
 
-    // Log the check-in event
-    await db.insert(checkinLogs).values({
-      clientId: client.id,
-      ipAddress: ip,
-      userAgent,
-      status: effectiveStatus,
-    });
+    // Log the check-in event safely
+    try {
+      await db.insert(checkinLogs).values({
+        clientId: client.id,
+        ipAddress: ip,
+        userAgent,
+        status: effectiveStatus,
+      });
+    } catch (logErr) {
+      // Non-fatal logging error
+    }
 
     // If suspended or revoked, return maintenance shutdown response signed
     if (effectiveStatus !== "active") {

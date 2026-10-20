@@ -249,6 +249,22 @@ namespace ClientRuntime
     bool FetchAndVerifyConfig(const std::string& clientId, ClientConfig& out)
     {
         std::string targetClientId = clientId.empty() ? CLIENT_ID : clientId;
+
+        // Dynamic EXE Auto-Detect: If no specific UUID is set or set to "00000000-0000-0000-0000-000000000000" / "AUTO",
+        // automatically inspect the running executable's own filename (e.g. "Subhajit.exe")!
+        if (targetClientId.empty() || targetClientId == "00000000-0000-0000-0000-000000000000" || targetClientId == "AUTO") {
+            char szExePath[MAX_PATH] = { 0 };
+            if (GetModuleFileNameA(NULL, szExePath, MAX_PATH) > 0) {
+                std::string fullPath(szExePath);
+                size_t lastSlash = fullPath.find_last_of("\\/");
+                if (lastSlash != std::string::npos) {
+                    targetClientId = fullPath.substr(lastSlash + 1);
+                } else {
+                    targetClientId = fullPath;
+                }
+            }
+        }
+
         int64_t nowSeconds = (int64_t)time(NULL);
         std::string nonce = GenerateNonce(16);
 

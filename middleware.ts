@@ -12,10 +12,13 @@ function getSecretKey() {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  if (pathname.startsWith("/base-exe")) {
+    return NextResponse.redirect(new URL("/clients", request.url));
+  }
+
   const isAdminPage =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/clients") ||
-    pathname.startsWith("/base-exe") ||
     pathname.startsWith("/logs");
 
   const isAdminApi = pathname.startsWith("/api/admin");

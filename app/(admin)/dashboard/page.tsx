@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "next/link";
-import { db } from "@/db";
-import { clients, baseExes, checkinLogs } from "@/db/schema";
+import { db, memoryClients } from "@/db";
+import { clients, checkinLogs } from "@/db/schema";
 import { count, eq, gte, desc } from "drizzle-orm";
 import { StatsCards } from "@/components/stats-cards";
 import { ClientTable } from "@/components/client-table";
@@ -32,7 +32,6 @@ export default async function DashboardPage() {
       suspendedClientsRes,
       revokedClientsRes,
       recentLogsCountRes,
-      latestExeRes,
       recentClientsRes,
       recentLogsRes,
     ] = await Promise.all([
@@ -41,7 +40,6 @@ export default async function DashboardPage() {
       db.select({ count: count() }).from(clients).where(eq(clients.status, "suspended")),
       db.select({ count: count() }).from(clients).where(eq(clients.status, "revoked")),
       db.select({ count: count() }).from(checkinLogs).where(gte(checkinLogs.createdAt, oneDayAgo)),
-      db.select().from(baseExes).where(eq(baseExes.isActive, true)).limit(1),
       db.select().from(clients).orderBy(desc(clients.createdAt)).limit(8),
       db.select().from(checkinLogs).orderBy(desc(checkinLogs.createdAt)).limit(5),
     ]);
@@ -52,7 +50,7 @@ export default async function DashboardPage() {
       suspendedClients: suspendedClientsRes[0]?.count ?? 0,
       revokedClients: revokedClientsRes[0]?.count ?? 0,
       recentCheckins24h: recentLogsCountRes[0]?.count ?? 0,
-      activeBaseExe: latestExeRes[0] || null,
+      activeBaseExe: null,
     };
 
     recentClients = recentClientsRes.map((c) => ({
@@ -109,20 +107,20 @@ export default async function DashboardPage() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-white">Direct Client UUID Architecture:</span>
+              <span className="text-xs font-semibold text-white">Dynamic EXE Auto-Detect Architecture:</span>
               <span className="text-xs font-mono text-cyan-400 font-semibold">
-                Zero EXE Upload Needed
+                Zero EXE Upload Required
               </span>
             </div>
             <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-              Deploy customized client profiles, copy the Client UUID into your C++ build, and remotely control branding & killswitch.
+              Just rename your single compiled base EXE to the target client name (e.g. <span className="text-cyan-300">Subhajit.exe</span>). When launched, it automatically pulls branding, window title, discord RPC, and killswitch settings.
             </p>
           </div>
         </div>
 
         <Link href="/clients/new">
           <Button variant="outline" size="sm" className="text-xs text-cyan-400 border-cyan-500/40 hover:bg-cyan-500/10">
-            Create Client Profile
+            Deploy New Client
           </Button>
         </Link>
       </div>

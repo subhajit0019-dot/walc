@@ -84,10 +84,21 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState(false);
+  const [copiedExe, setCopiedExe] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
   const updateField = (field: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      const updated = { ...prev, [field]: value };
+      // Auto-suggest EXE name when typing client name if not customized
+      if (field === "name" && (prev.exeName === "Client.exe" || prev.exeName === "" || prev.exeName === `${prev.name.replace(/\s+/g, "_")}.exe`)) {
+        const cleanSlug = value.trim().replace(/\s+/g, "_");
+        if (cleanSlug) {
+          updated.exeName = `${cleanSlug}.exe`;
+        }
+      }
+      return updated;
+    });
   };
 
   const handleCopyId = () => {
@@ -95,6 +106,13 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
     navigator.clipboard.writeText(initialData.id);
     setCopiedId(true);
     setTimeout(() => setCopiedId(false), 2000);
+  };
+
+  const handleCopyExeName = () => {
+    const exe = formData.exeName.endsWith(".exe") ? formData.exeName : `${formData.exeName}.exe`;
+    navigator.clipboard.writeText(exe);
+    setCopiedExe(true);
+    setTimeout(() => setCopiedExe(false), 2000);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -106,8 +124,14 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
       const url = isNew ? "/api/admin/clients" : `/api/admin/clients/${initialData.id}`;
       const method = isNew ? "POST" : "PATCH";
 
+      let cleanExe = formData.exeName.trim();
+      if (!cleanExe.toLowerCase().endsWith(".exe")) {
+        cleanExe = `${cleanExe}.exe`;
+      }
+
       const payload = {
         ...formData,
+        exeName: cleanExe,
         expiresAt: formData.expiresAt ? new Date(formData.expiresAt).toISOString() : null,
       };
 
@@ -119,7 +143,16 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Failed to save client");
+        let errorMsg = data.error || "Failed to save client";
+        if (data.details?.fieldErrors) {
+          const fieldMsgs = Object.entries(data.details.fieldErrors).map(
+            ([field, errs]) => `${field}: ${(errs as string[])?.join(", ")}`
+          );
+          if (fieldMsgs.length > 0) {
+            errorMsg = `Validation error: ${fieldMsgs.join(" | ")}`;
+          }
+        }
+        throw new Error(errorMsg);
       }
 
       router.push("/clients");
@@ -135,7 +168,6 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
     if (!initialData?.id) return;
     setDownloading(true);
     try {
-      // The endpoint handles streaming with custom attachment filename
       window.location.href = `/api/download/${initialData.id}`;
     } catch (err) {
       console.error("Download trigger failed:", err);
@@ -170,66 +202,90 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
           </div>
         )}
 
-        {/* Client ID / Quick Controls */}
-        {!isNew && initialData?.id && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <Label className="text-[10px] text-slate-500">Embedded Client UUID</Label>
-              <div className="flex items-center gap-2 mt-0.5">
-                <code className="text-xs font-mono text-cyan-400 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+        {/* Dynamic Rename Deployment Banner */}
+        <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs font-semibold text-white">Dynamic Auto-Detect EXE:</span>
+              <code className="text-xs font-mono font-bold text-cyan-400 bg-slate-950 px-2 py-0.5 rounded border border-cyan-800/60">
+                {formData.exeName.endsWith(".exe") ? formData.exeName : `${formData.exeName}.exe`}
+              </code>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCopyExeName}
+              className="gap-1.5 text-xs text-cyan-400 border-cyan-500/40 hover:bg-cyan-500/10 h-7"
+            >
+              {copiedExe ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+              <span>{copiedExe ? "Copied EXE Name" : "Copy EXE Name"}</span>
+            </Button>
+          </div>
+
+          <p className="text-[11px] font-mono text-slate-400 leading-relaxed">
+            💡 <strong className="text-slate-200">Zero Upload Setup:</strong> Rename your compiled base executable to{" "}
+            <strong className="text-cyan-300">{formData.exeName.endsWith(".exe") ? formData.exeName : `${formData.exeName}.exe`}</strong>{" "}
+            and launch it! It will auto-detect its filename, connect to this panel, and load all branding and killswitch controls dynamically.
+          </p>
+
+          {!isNew && initialData?.id && (
+            <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-500 font-mono">UUID:</span>
+                <code className="text-[11px] font-mono text-slate-400">
                   {initialData.id}
                 </code>
+                <button
+                  type="button"
+                  onClick={handleCopyId}
+                  className="text-slate-500 hover:text-white"
+                  title="Copy Client UUID"
+                >
+                  {copiedId ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`ClientRuntime::CLIENT_ID = "${initialData.id}";`);
+                    alert("Copied to clipboard!\n\nPaste this in your C++ ClientConfig.cpp:\nClientRuntime::CLIENT_ID = \"" + initialData.id + "\";");
+                  }}
+                  className="gap-1 text-[11px] text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/10 h-7"
+                >
+                  <Copy className="h-3 w-3" />
+                  <span>Copy C++ Code</span>
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-slate-400 hover:text-white"
-                  onClick={handleCopyId}
-                  title="Copy Client UUID"
+                  size="sm"
+                  onClick={handleDownloadExe}
+                  disabled={downloading || formData.status !== "active"}
+                  className="gap-1 text-[11px] text-slate-300 hover:text-white h-7"
                 >
-                  {copiedId ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                  <Download className="h-3 w-3" />
+                  <span>Export JSON</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDelete}
+                  className="gap-1 text-[11px] h-7"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  <span>Delete</span>
                 </Button>
               </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(`ClientRuntime::CLIENT_ID = "${initialData.id}";`);
-                  alert("Copied to clipboard!\n\nPaste this in your C++ ClientConfig.cpp:\nClientRuntime::CLIENT_ID = \"" + initialData.id + "\";");
-                }}
-                className="gap-1.5 text-xs text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/10"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                <span>Copy C++ Code</span>
-              </Button>
-              <Button
-                type="button"
-                variant="glow"
-                size="sm"
-                onClick={handleDownloadExe}
-                disabled={downloading || formData.status !== "active"}
-                className="gap-2 text-xs"
-              >
-                <Download className="h-4 w-4" />
-                <span>Export Config (.json)</span>
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                onClick={handleDelete}
-                className="gap-1.5 text-xs"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                <span>Delete</span>
-              </Button>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* 1. General & Status */}
         <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-6 space-y-4">
@@ -240,25 +296,28 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="name">Client Internal Name</Label>
+              <Label htmlFor="name">Client Name / Slug</Label>
               <Input
                 id="name"
                 value={formData.name}
                 onChange={(e) => updateField("name", e.target.value)}
-                placeholder="e.g. VIP Customer 1"
+                placeholder="e.g. Subhajit"
                 required
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="exeName">Download EXE File Name</Label>
+              <Label htmlFor="exeName">Target EXE File Name (Auto-Detect Rename)</Label>
               <Input
                 id="exeName"
                 value={formData.exeName}
                 onChange={(e) => updateField("exeName", e.target.value)}
-                placeholder="e.g. MeowGG_VIP.exe"
+                placeholder="e.g. Subhajit.exe"
                 required
               />
+              <p className="text-[10px] text-slate-500 font-mono">
+                Rename your compiled EXE to this name to bind automatically.
+              </p>
             </div>
           </div>
 

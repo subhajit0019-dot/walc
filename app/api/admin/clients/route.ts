@@ -85,59 +85,75 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const result = clientFormSchema.safeParse(body);
     if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+      const errorMsg = Object.entries(fieldErrors)
+        .map(([field, errs]) => `${field}: ${errs?.join(", ")}`)
+        .join("; ");
       return NextResponse.json(
-        { error: "Validation failed", details: result.error.flatten() },
+        { error: `Validation failed: ${errorMsg}`, details: result.error.flatten() },
         { status: 400 }
       );
     }
 
-    await ensureTablesExist();
+    try {
+      await ensureTablesExist();
+    } catch (e) {
+      console.warn("ensureTablesExist error:", e);
+    }
 
     const data = result.data;
     const clientSecret = crypto.randomBytes(32).toString("hex");
     const newId = crypto.randomUUID();
 
+    let cleanExeName = data.exeName.trim();
+    if (!cleanExeName.toLowerCase().endsWith(".exe")) {
+      cleanExeName = `${cleanExeName}.exe`;
+    }
+
     const newClientRecord = {
       id: newId,
       name: data.name,
       status: data.status,
-      exeName: data.exeName,
-      cheatName: data.cheatName,
-      titlePart1: data.titlePart1,
-      titlePart2: data.titlePart2,
-      windowTitle: data.windowTitle,
-      subtitle: data.subtitle,
-      loadingText: data.loadingText,
-      discordInviteUrl: data.discordInviteUrl,
-      rpcEnabled: data.rpcEnabled,
-      rpcAppId: data.rpcAppId,
-      rpcState: data.rpcState,
-      rpcDetails: data.rpcDetails,
-      rpcLargeImage: data.rpcLargeImage,
-      rpcLargeText: data.rpcLargeText,
-      rpcSmallImage: data.rpcSmallImage,
-      rpcSmallText: data.rpcSmallText,
-      rpcButton1Label: data.rpcButton1Label,
-      rpcButton1Url: data.rpcButton1Url,
-      rpcButton2Label: data.rpcButton2Label,
-      rpcButton2Url: data.rpcButton2Url,
-      enableAuth: data.enableAuth,
-      authName: data.authName,
-      authOwnerId: data.authOwnerId,
-      authSecret: data.authSecret,
-      authVersion: data.authVersion,
-      authUrl: data.authUrl,
-      authPath: data.authPath,
-      enableMaintenanceCheck: data.enableMaintenanceCheck,
-      maintenanceTitle: data.maintenanceTitle,
-      maintenanceText: data.maintenanceText,
+      exeName: cleanExeName,
+      cheatName: data.cheatName || "MeowGG",
+      titlePart1: data.titlePart1 || "Meow",
+      titlePart2: data.titlePart2 || ".GG",
+      windowTitle: data.windowTitle || "MeowGG",
+      subtitle: data.subtitle || "Dev : Subhajit | MeowGG",
+      loadingText: data.loadingText || "Connecting To DataBase",
+      discordInviteUrl: data.discordInviteUrl || "https://discord.gg/meowgg",
+      rpcEnabled: data.rpcEnabled ?? true,
+      rpcAppId: data.rpcAppId || "1561024986851057715",
+      rpcState: data.rpcState || "MeowGG",
+      rpcDetails: data.rpcDetails || "discord.gg/meowgg",
+      rpcLargeImage: data.rpcLargeImage || "",
+      rpcLargeText: data.rpcLargeText || "MeowGG Community",
+      rpcSmallImage: data.rpcSmallImage || "",
+      rpcSmallText: data.rpcSmallText || "Developer : Subhajit",
+      rpcButton1Label: data.rpcButton1Label || "<3 Buying Here !",
+      rpcButton1Url: data.rpcButton1Url || "https://discord.gg/meowgg",
+      rpcButton2Label: data.rpcButton2Label || "Developer",
+      rpcButton2Url: data.rpcButton2Url || "https://discord.gg/meowgg",
+      enableAuth: data.enableAuth ?? true,
+      authName: data.authName || "all free",
+      authOwnerId: data.authOwnerId || "29B4YqY38s",
+      authSecret: data.authSecret || "",
+      authVersion: data.authVersion || "1.0",
+      authUrl: data.authUrl || "https://licenseauth.help/api/1.3/",
+      authPath: data.authPath || "",
+      enableMaintenanceCheck: data.enableMaintenanceCheck ?? true,
+      maintenanceTitle: data.maintenanceTitle || "Maintenance Notice",
+      maintenanceText: data.maintenanceText || "EXE Under Maintenance. Contact Owner.",
       clientSecret,
       expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    // Try database insertion
+    // Store in memory first (guaranteed success)
+    memoryClients.set(newClientRecord.id, newClientRecord);
+
+    // Also attempt inserting into PostgreSQL database
     try {
       const [inserted] = await db
         .insert(clients)
@@ -149,11 +165,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, client: inserted }, { status: 201 });
       }
     } catch (dbErr) {
-      console.warn("DB insert failed, storing in resilient memory fallback:", dbErr);
+      console.warn("DB insert deferred/failed, client preserved in memory store:", dbErr);
     }
 
-    // Always succeed with resilient memory store
-    memoryClients.set(newClientRecord.id, newClientRecord);
     return NextResponse.json({ success: true, client: newClientRecord }, { status: 201 });
   } catch (error) {
     console.error("POST /api/admin/clients error:", error);

@@ -6,7 +6,6 @@ import {
   LayoutDashboard,
   Users,
   PlusCircle,
-  FileCode2,
   Activity,
   KeyRound,
   ExternalLink,
@@ -40,13 +39,8 @@ const NAV_ITEMS = [
     ],
   },
   {
-    title: "Binary Management",
+    title: "Monitoring",
     items: [
-      {
-        name: "Base EXE Engine",
-        href: "/base-exe",
-        icon: FileCode2,
-      },
       {
         name: "Check-in Logs",
         href: "/logs",
