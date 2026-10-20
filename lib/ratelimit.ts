@@ -26,19 +26,23 @@ export async function checkRateLimit(
   windowSeconds: number
 ): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
   if (redis) {
-    const ratelimit = new Ratelimit({
-      redis,
-      limiter: Ratelimit.slidingWindow(limit, `${windowSeconds} s`),
-      analytics: true,
-      prefix: "cursed_ratelimit",
-    });
-    const result = await ratelimit.limit(key);
-    return {
-      success: result.success,
-      limit: result.limit,
-      remaining: result.remaining,
-      reset: result.reset,
-    };
+    try {
+      const ratelimit = new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(limit, `${windowSeconds} s`),
+        analytics: false,
+        prefix: "cursed_ratelimit",
+      });
+      const result = await ratelimit.limit(key);
+      return {
+        success: result.success,
+        limit: result.limit,
+        remaining: result.remaining,
+        reset: result.reset,
+      };
+    } catch (e) {
+      console.warn("Redis checkRateLimit fallback:", e);
+    }
   }
 
   // In-memory sliding window fallback
@@ -66,9 +70,13 @@ export async function verifyAndStoreNonce(nonce: string, ttlSeconds = 120): Prom
   const nonceKey = `nonce:${nonce}`;
 
   if (redis) {
-    // SETNX with TTL in Redis
-    const set = await redis.set(nonceKey, "1", { nx: true, ex: ttlSeconds });
-    return set === "OK";
+    try {
+      // SETNX with TTL in Redis
+      const set = await redis.set(nonceKey, "1", { nx: true, ex: ttlSeconds });
+      return set === "OK";
+    } catch (e) {
+      console.warn("Redis verifyAndStoreNonce fallback:", e);
+    }
   }
 
   // Fallback in-memory

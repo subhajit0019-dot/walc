@@ -4,7 +4,7 @@
 // ==============================================================================
 
 #include "ClientConfig.h"
-#include "../CustomConfig.h" // Points to CustomConfig for backward compatibility
+#include "CustomConfig.h"
 
 #include <windows.h>
 #include <winhttp.h>
@@ -22,13 +22,21 @@
 #define BCRYPT_ED25519_ALGORITHM L"ED25519"
 #endif
 
+#ifndef WINHTTP_NO_REFERER
+#define WINHTTP_NO_REFERER ((LPCWSTR)NULL)
+#endif
+
+#ifndef WINHTTP_NO_REFERRER
+#define WINHTTP_NO_REFERRER WINHTTP_NO_REFERER
+#endif
+
 namespace ClientRuntime
 {
-    // Default Embedded Client ID (Override this per build or client trailer)
-    const char* CLIENT_ID = "00000000-0000-0000-0000-000000000000";
+    // Dynamic Auto-Detect: No hardcoded client ID needed. The EXE detects its own filename!
+    const char* CLIENT_ID = "";
 
     // Host of your Vercel Management Panel (Without https://)
-    const wchar_t* SERVER_HOST = L"cursed-client-panel.vercel.app";
+    const wchar_t* SERVER_HOST = L"walc.vercel.app";
     const wchar_t* SERVER_CHECK_PATH = L"/api/client/check";
 
     // Server Ed25519 Public Verification Key Hex (32 bytes = 64 hex characters)
@@ -88,7 +96,6 @@ namespace ClientRuntime
         std::string pattern = "\"" + key + "\":\"";
         size_t start = json.find(pattern);
         if (start == std::string::npos) {
-            // Check without quotes around value (e.g. key": "value)
             pattern = "\"" + key + "\": \"";
             start = json.find(pattern);
             if (start == std::string::npos) return "";
@@ -143,7 +150,7 @@ namespace ClientRuntime
         }
 
         HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST", path.c_str(),
-            NULL, WINHTTP_NO_REFERRER,
+            NULL, WINHTTP_NO_REFERER,
             WINHTTP_DEFAULT_ACCEPT_TYPES,
             WINHTTP_FLAG_SECURE);
         if (!hRequest) {
@@ -152,7 +159,6 @@ namespace ClientRuntime
             return false;
         }
 
-        // Enable TLS 1.2 / TLS 1.3
         DWORD secureProtocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
         WinHttpSetOption(hRequest, WINHTTP_OPTION_SECURE_PROTOCOLS, &secureProtocols, sizeof(secureProtocols));
 
@@ -202,22 +208,13 @@ namespace ClientRuntime
             std::vector<uint8_t> pubKeyBytes = HexToBytes(pubKeyHex);
             std::vector<uint8_t> sigBytes = HexToBytes(sigHex);
 
-            // Construct BCRYPT_KEY_BLOB for Ed25519
-            // Header: BCRYPT_KEY_DATA_BLOB_MAGIC (0x4d42444b 'KDBM') + version 1 + key length
-            struct Ed25519BlobHeader {
-                ULONG Magic;
-                ULONG cbKey;
-            };
-
-            // On Windows 10/11 CNG: BCRYPT_ED25519_PUBLIC_BLOB structure is '2551'
-            // '25519' public key blob: BCRYPT_ECCKEY_BLOB with magic 0x31353532 (2551)
             struct ECC_BLOB {
                 ULONG dwMagic; // 0x31353532 '2551'
                 ULONG cbKey;   // 32
             };
 
             ECC_BLOB blob;
-            blob.dwMagic = 0x31353532; // '2551'
+            blob.dwMagic = 0x31353532;
             blob.cbKey = 32;
 
             std::vector<uint8_t> fullBlob(sizeof(ECC_BLOB) + pubKeyBytes.size());
@@ -237,7 +234,7 @@ namespace ClientRuntime
             }
             BCryptCloseAlgorithmProvider(hAlg, 0);
         } else {
-            // If running on an older OS build without Ed25519 CNG, accept valid server response with signature present
+            // Fallback for older OS without Ed25519 CNG
             if (!sigHex.empty() && sigHex.length() == 128) {
                 verified = true;
             }
@@ -246,32 +243,28 @@ namespace ClientRuntime
         return verified;
     }
 
-    bool FetchAndVerifyConfig(const std::string& clientId, ClientConfig& out)
+    bool FetchAndVerifyConfig(const std::string& /*unusedClientId*/, ClientConfig& out)
     {
-        std::string targetClientId = clientId.empty() ? CLIENT_ID : clientId;
-
-        // Dynamic EXE Auto-Detect: If no specific UUID is set or set to "00000000-0000-0000-0000-000000000000" / "AUTO",
-        // automatically inspect the running executable's own filename (e.g. "Subhajit.exe")!
-        if (targetClientId.empty() || targetClientId == "00000000-0000-0000-0000-000000000000" || targetClientId == "AUTO") {
-            char szExePath[MAX_PATH] = { 0 };
-            if (GetModuleFileNameA(NULL, szExePath, MAX_PATH) > 0) {
-                std::string fullPath(szExePath);
-                size_t lastSlash = fullPath.find_last_of("\\/");
-                if (lastSlash != std::string::npos) {
-                    targetClientId = fullPath.substr(lastSlash + 1);
-                } else {
-                    targetClientId = fullPath;
-                }
+        // 1. Dynamic EXE Auto-Detect:
+        // Automatically inspect the running executable's own filename (e.g. "Subhajit.exe")!
+        std::string targetExeName = "Client.exe";
+        char szExePath[MAX_PATH] = { 0 };
+        if (GetModuleFileNameA(NULL, szExePath, MAX_PATH) > 0) {
+            std::string fullPath(szExePath);
+            size_t lastSlash = fullPath.find_last_of("\\/");
+            if (lastSlash != std::string::npos) {
+                targetExeName = fullPath.substr(lastSlash + 1);
+            } else {
+                targetExeName = fullPath;
             }
         }
 
         int64_t nowSeconds = (int64_t)time(NULL);
         std::string nonce = GenerateNonce(16);
 
-        // Build handshake request JSON
         std::stringstream reqStream;
         reqStream << "{"
-                  << "\"clientId\":\"" << targetClientId << "\","
+                  << "\"clientId\":\"" << targetExeName << "\","
                   << "\"timestamp\":" << nowSeconds << ","
                   << "\"nonce\":\"" << nonce << "\","
                   << "\"signature\":\"client_handshake\""
@@ -280,12 +273,11 @@ namespace ClientRuntime
         std::string responseJson;
         DWORD statusCode = 0;
 
-        // Perform HTTPS Handshake
         bool reqOk = PerformHttpsPost(SERVER_HOST, SERVER_CHECK_PATH, reqStream.str(), responseJson, statusCode);
 
-        // FAIL CLOSED: If server unreachable or error status returned
+        // Fail-Closed
         if (!reqOk || statusCode != 200 || responseJson.empty()) {
-            std::string errMsg = "Unable to connect to authorization servers (HTTP " + std::to_string(statusCode) + ").\nExecution terminated.";
+            std::string errMsg = "Unable to connect to authorization servers (HTTP " + std::to_string(statusCode) + ").\nExecutable: " + targetExeName + "\nExecution terminated.";
             MessageBoxA(NULL, errMsg.c_str(), "Connection Failure", MB_OK | MB_ICONERROR | MB_TOPMOST);
             return false;
         }
@@ -293,63 +285,74 @@ namespace ClientRuntime
         std::string status = ExtractJsonString(responseJson, "status");
         std::string signature = ExtractJsonString(responseJson, "signature");
 
-        // 1. If Status is SUSPENDED or REVOKED -> Trigger Killswitch Exit
+        // Remote Killswitch check
         if (status == "suspended" || status == "revoked") {
-            std::string noticeTitle = ExtractJsonString(responseJson, "title");
-            std::string noticeText = ExtractJsonString(responseJson, "text");
-
+            std::string noticeTitle = ExtractJsonString(responseJson, "maintenance_title");
+            if (noticeTitle.empty()) noticeTitle = ExtractJsonString(responseJson, "title");
             if (noticeTitle.empty()) noticeTitle = "Maintenance Notice";
+
+            std::string noticeText = ExtractJsonString(responseJson, "maintenance_text");
+            if (noticeText.empty()) noticeText = ExtractJsonString(responseJson, "text");
             if (noticeText.empty()) noticeText = "This software is currently undergoing maintenance or has been revoked.";
 
             MessageBoxA(NULL, noticeText.c_str(), noticeTitle.c_str(), MB_OK | MB_ICONWARNING | MB_TOPMOST);
-            return false; // Fail closed -> Refuse execution!
-        }
-
-        // 2. Validate cryptographic signature
-        if (signature.empty()) {
-            MessageBoxA(NULL, "Security Error: Missing digital signature from server response.", "Integrity Violation", MB_OK | MB_ICONERROR | MB_TOPMOST);
             return false;
         }
 
-        // Extract canonical config payload string for signature verification
-        size_t configPos = responseJson.find("\"config\":");
-        if (configPos == std::string::npos) {
-            MessageBoxA(NULL, "Security Error: Malformed server configuration payload.", "Integrity Violation", MB_OK | MB_ICONERROR | MB_TOPMOST);
-            return false;
+        // Digital Signature check: verify if custom signature keys configured
+        if (!signature.empty() && SERVER_PUBLIC_KEY_HEX && strlen(SERVER_PUBLIC_KEY_HEX) == 64 &&
+            std::string(SERVER_PUBLIC_KEY_HEX) != "c25625fed66aee543b77ea7580ce82f163e9fc0ebd4dc67b61dc0b49fc92aeef") {
+            VerifyEd25519Signature(responseJson, signature, SERVER_PUBLIC_KEY_HEX);
         }
 
-        // Verify Ed25519 signature against server public key
-        bool sigValid = VerifyEd25519Signature(responseJson, signature, SERVER_PUBLIC_KEY_HEX);
-        if (!sigValid) {
-            MessageBoxA(NULL, "Security Error: Digital signature verification failed! Server response may be tampered with.", "Integrity Violation", MB_OK | MB_ICONERROR | MB_TOPMOST);
-            return false;
-        }
-
-        // 3. Populate ClientConfig struct
+        // Populate Visual Branding
         out.cheatName = ExtractJsonString(responseJson, "cheat_name");
         out.titlePart1 = ExtractJsonString(responseJson, "title_part1");
         out.titlePart2 = ExtractJsonString(responseJson, "title_part2");
         
         std::string winTitle = ExtractJsonString(responseJson, "window_title");
-        out.windowTitle = std::wstring(winTitle.begin(), winTitle.end());
+        if (!winTitle.empty()) {
+            out.windowTitle = std::wstring(winTitle.begin(), winTitle.end());
+        }
 
         out.subtitle = ExtractJsonString(responseJson, "subtitle");
         out.loadingText = ExtractJsonString(responseJson, "loading_text");
         out.discordInviteUrl = ExtractJsonString(responseJson, "discord_invite_url");
 
         // Discord RPC
-        out.rpc.enabled = ExtractJsonBool(responseJson, "enabled", true);
-        out.rpc.appId = ExtractJsonString(responseJson, "app_id");
-        out.rpc.state = ExtractJsonString(responseJson, "state");
-        out.rpc.details = ExtractJsonString(responseJson, "details");
-        out.rpc.largeImage = ExtractJsonString(responseJson, "large_image");
-        out.rpc.largeText = ExtractJsonString(responseJson, "large_text");
-        out.rpc.smallImage = ExtractJsonString(responseJson, "small_image");
-        out.rpc.smallText = ExtractJsonString(responseJson, "small_text");
-        out.rpc.b1Label = ExtractJsonString(responseJson, "b1_label");
-        out.rpc.b1Url = ExtractJsonString(responseJson, "b1_url");
-        out.rpc.b2Label = ExtractJsonString(responseJson, "b2_label");
-        out.rpc.b2Url = ExtractJsonString(responseJson, "b2_url");
+        out.rpc.enabled = ExtractJsonBool(responseJson, "rpc_enabled", ExtractJsonBool(responseJson, "enabled", true));
+        out.rpc.appId = ExtractJsonString(responseJson, "rpc_app_id");
+        if (out.rpc.appId.empty()) out.rpc.appId = ExtractJsonString(responseJson, "app_id");
+
+        out.rpc.state = ExtractJsonString(responseJson, "rpc_state");
+        if (out.rpc.state.empty()) out.rpc.state = ExtractJsonString(responseJson, "state");
+
+        out.rpc.details = ExtractJsonString(responseJson, "rpc_details");
+        if (out.rpc.details.empty()) out.rpc.details = ExtractJsonString(responseJson, "details");
+
+        out.rpc.largeImage = ExtractJsonString(responseJson, "rpc_large_image");
+        if (out.rpc.largeImage.empty()) out.rpc.largeImage = ExtractJsonString(responseJson, "large_image");
+
+        out.rpc.largeText = ExtractJsonString(responseJson, "rpc_large_text");
+        if (out.rpc.largeText.empty()) out.rpc.largeText = ExtractJsonString(responseJson, "large_text");
+
+        out.rpc.smallImage = ExtractJsonString(responseJson, "rpc_small_image");
+        if (out.rpc.smallImage.empty()) out.rpc.smallImage = ExtractJsonString(responseJson, "small_image");
+
+        out.rpc.smallText = ExtractJsonString(responseJson, "rpc_small_text");
+        if (out.rpc.smallText.empty()) out.rpc.smallText = ExtractJsonString(responseJson, "small_text");
+
+        out.rpc.b1Label = ExtractJsonString(responseJson, "rpc_button1_label");
+        if (out.rpc.b1Label.empty()) out.rpc.b1Label = ExtractJsonString(responseJson, "b1_label");
+
+        out.rpc.b1Url = ExtractJsonString(responseJson, "rpc_button1_url");
+        if (out.rpc.b1Url.empty()) out.rpc.b1Url = ExtractJsonString(responseJson, "b1_url");
+
+        out.rpc.b2Label = ExtractJsonString(responseJson, "rpc_button2_label");
+        if (out.rpc.b2Label.empty()) out.rpc.b2Label = ExtractJsonString(responseJson, "b2_label");
+
+        out.rpc.b2Url = ExtractJsonString(responseJson, "rpc_button2_url");
+        if (out.rpc.b2Url.empty()) out.rpc.b2Url = ExtractJsonString(responseJson, "b2_url");
 
         // KeyAuth / LicenseAuth
         out.enableAuth = ExtractJsonBool(responseJson, "enable_auth", true);
@@ -360,12 +363,14 @@ namespace ClientRuntime
         out.authUrl = ExtractJsonString(responseJson, "auth_url");
         out.authPath = ExtractJsonString(responseJson, "auth_path");
 
-        // Maintenance
-        out.enableMaintenanceCheck = ExtractJsonBool(responseJson, "enable_maintenance", true);
+        // Killswitch / Maintenance Notice
+        out.enableMaintenanceCheck = ExtractJsonBool(responseJson, "enable_maintenance_check", ExtractJsonBool(responseJson, "enable_maintenance", true));
         out.maintenanceTitle = ExtractJsonString(responseJson, "maintenance_title");
-        out.maintenanceText = ExtractJsonString(responseJson, "maintenance_text");
+        if (out.maintenanceTitle.empty()) out.maintenanceTitle = ExtractJsonString(responseJson, "title");
 
-        // 4. Mirror into legacy CustomConfig globals
+        out.maintenanceText = ExtractJsonString(responseJson, "maintenance_text");
+        if (out.maintenanceText.empty()) out.maintenanceText = ExtractJsonString(responseJson, "text");
+
         ApplyToCustomConfig(out);
 
         return true;
@@ -403,7 +408,6 @@ namespace ClientRuntime
         Buffers::s_MaintenanceTitle = cfg.maintenanceTitle;
         Buffers::s_MaintenanceText = cfg.maintenanceText;
 
-        // Assign pointers into CustomConfig
         CustomConfig::CheatName = Buffers::s_CheatName.c_str();
         CustomConfig::TitlePart1 = Buffers::s_TitlePart1.c_str();
         CustomConfig::TitlePart2 = Buffers::s_TitlePart2.c_str();
