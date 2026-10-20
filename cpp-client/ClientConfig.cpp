@@ -35,8 +35,9 @@ namespace ClientRuntime
     // Dynamic Auto-Detect: No hardcoded client ID needed. The EXE detects its own filename!
     const char* CLIENT_ID = "";
 
-    // Host of your Vercel Management Panel (Without https://)
-    const wchar_t* SERVER_HOST = L"walc.vercel.app";
+    // Primary Vercel Management Panel receiving GitHub deployments
+    const wchar_t* SERVER_HOST = L"meow-gg-admin.vercel.app";
+    const wchar_t* FALLBACK_SERVER_HOST = L"walc.vercel.app";
     const wchar_t* SERVER_CHECK_PATH = L"/api/client/check";
 
     // Server Ed25519 Public Verification Key Hex (32 bytes = 64 hex characters)
@@ -274,9 +275,13 @@ namespace ClientRuntime
         DWORD statusCode = 0;
 
         bool reqOk = PerformHttpsPost(SERVER_HOST, SERVER_CHECK_PATH, reqStream.str(), responseJson, statusCode);
+        if (!reqOk || statusCode != 200 || responseJson.empty()) {
+            // Try secondary/fallback host
+            PerformHttpsPost(FALLBACK_SERVER_HOST, SERVER_CHECK_PATH, reqStream.str(), responseJson, statusCode);
+        }
 
         // Fail-Closed
-        if (!reqOk || statusCode != 200 || responseJson.empty()) {
+        if (statusCode != 200 || responseJson.empty()) {
             std::string errMsg = "Unable to connect to authorization servers (HTTP " + std::to_string(statusCode) + ").\nExecutable: " + targetExeName + "\nExecution terminated.";
             MessageBoxA(NULL, errMsg.c_str(), "Connection Failure", MB_OK | MB_ICONERROR | MB_TOPMOST);
             return false;

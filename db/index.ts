@@ -15,6 +15,94 @@ declare global {
 export const memoryClients = global.__memoryClients || new Map<string, any>();
 export const memoryLogs = global.__memoryLogs || [];
 
+if (memoryClients.size === 0) {
+  const defaults = [
+    {
+      id: "dc59568d-4517-4ad8-9b88-82df72ef3125",
+      name: "Premium Client 01",
+      status: "active",
+      exeName: "MeowGG66.exe",
+      cheatName: "MeowGG",
+      titlePart1: "Meow",
+      titlePart2: ".GG",
+      windowTitle: "MeowGG",
+      subtitle: "Dev : Subhajit | MeowGG",
+      loadingText: "Connecting To DataBase",
+      discordInviteUrl: "https://discord.gg/meowgg",
+      rpcEnabled: true,
+      rpcAppId: "1561024986851057715",
+      rpcState: "MeowGG",
+      rpcDetails: "discord.gg/meowgg",
+      rpcLargeImage:
+        "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHVucnVxYmliMWF1NXoyYmd3YzhobTBvZmFtbXdwaHY4MzhxdGtidCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/vas3wYC3KZ9AEo01xn/giphy.gif",
+      rpcLargeText: "MeowGG Community",
+      rpcSmallImage: "https://cdn3.emoji.gg/emojis/5863-verified-red-animated.gif",
+      rpcSmallText: "Developer : Subhajit",
+      rpcButton1Label: "<3 Buying Here !",
+      rpcButton1Url: "https://discord.gg/meowgg",
+      rpcButton2Label: "Developer",
+      rpcButton2Url: "https://discord.gg/meowgg",
+      enableAuth: true,
+      authName: "all free",
+      authOwnerId: "29B4YqY38s",
+      authSecret: "",
+      authVersion: "1.0",
+      authUrl: "https://licenseauth.help/api/1.3/",
+      authPath: "",
+      enableMaintenanceCheck: true,
+      maintenanceTitle: "Maintenance Notice",
+      maintenanceText: "EXE Under Maintenance. Contact Owner.",
+      clientSecret: "f6c8d28a3013b5d29931efb70295da9f6e07662cbfdb85a2104470081d58296a",
+      expiresAt: null,
+      createdAt: new Date("2026-01-01"),
+      updatedAt: new Date("2026-01-01"),
+    },
+    {
+      id: "00000000-0000-0000-0000-000000000001",
+      name: "Subhajit",
+      status: "active",
+      exeName: "Subhajit.exe",
+      cheatName: "MeowGG",
+      titlePart1: "Meow",
+      titlePart2: ".GG",
+      windowTitle: "MeowGG",
+      subtitle: "Dev : Subhajit | MeowGG",
+      loadingText: "Connecting To DataBase",
+      discordInviteUrl: "https://discord.gg/meowgg",
+      rpcEnabled: true,
+      rpcAppId: "1561024986851057715",
+      rpcState: "MeowGG",
+      rpcDetails: "discord.gg/meowgg",
+      rpcLargeImage:
+        "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHVucnVxYmliMWF1NXoyYmd3YzhobTBvZmFtbXdwaHY4MzhxdGtidCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/vas3wYC3KZ9AEo01xn/giphy.gif",
+      rpcLargeText: "MeowGG Community",
+      rpcSmallImage: "https://cdn3.emoji.gg/emojis/5863-verified-red-animated.gif",
+      rpcSmallText: "Developer : Subhajit",
+      rpcButton1Label: "<3 Buying Here !",
+      rpcButton1Url: "https://discord.gg/meowgg",
+      rpcButton2Label: "Developer",
+      rpcButton2Url: "https://discord.gg/meowgg",
+      enableAuth: true,
+      authName: "all free",
+      authOwnerId: "29B4YqY38s",
+      authSecret: "",
+      authVersion: "1.0",
+      authUrl: "https://licenseauth.help/api/1.3/",
+      authPath: "",
+      enableMaintenanceCheck: true,
+      maintenanceTitle: "Maintenance Notice",
+      maintenanceText: "EXE Under Maintenance. Contact Owner.",
+      clientSecret: "f6c8d28a3013b5d29931efb70295da9f6e07662cbfdb85a2104470081d58296a",
+      expiresAt: null,
+      createdAt: new Date("2026-01-01"),
+      updatedAt: new Date("2026-01-01"),
+    },
+  ];
+  for (const d of defaults) {
+    memoryClients.set(d.id, d);
+  }
+}
+
 if (process.env.NODE_ENV !== "production") {
   global.__memoryClients = memoryClients;
   global.__memoryLogs = memoryLogs;
