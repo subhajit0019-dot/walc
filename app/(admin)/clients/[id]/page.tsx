@@ -1,6 +1,6 @@
 import React from "react";
 import { notFound } from "next/navigation";
-import { db } from "@/db";
+import { db, ensureTablesExist, memoryClients } from "@/db";
 import { clients } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { ClientEditorForm } from "@/components/client-editor-form";
@@ -14,17 +14,28 @@ export default async function ClientDetailPage({ params }: ClientPageProps) {
   let clientData = null;
 
   try {
+    await ensureTablesExist();
     const [row] = await db.select().from(clients).where(eq(clients.id, id));
     if (row) {
       clientData = {
         ...row,
-        createdAt: row.createdAt.toISOString(),
-        updatedAt: row.updatedAt.toISOString(),
-        expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+        updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
+        expiresAt: row.expiresAt ? (row.expiresAt instanceof Date ? row.expiresAt.toISOString() : String(row.expiresAt)) : null,
       };
     }
   } catch (e) {
     console.error("Client fetch error:", e);
+  }
+
+  if (!clientData && memoryClients.has(id)) {
+    const m = memoryClients.get(id);
+    clientData = {
+      ...m,
+      createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : String(m.createdAt || new Date().toISOString()),
+      updatedAt: m.updatedAt instanceof Date ? m.updatedAt.toISOString() : String(m.updatedAt || new Date().toISOString()),
+      expiresAt: m.expiresAt ? (m.expiresAt instanceof Date ? m.expiresAt.toISOString() : String(m.expiresAt)) : null,
+    };
   }
 
   if (!clientData) {

@@ -1,5 +1,5 @@
 import React from "react";
-import { db } from "@/db";
+import { db, ensureTablesExist, memoryClients } from "@/db";
 import { clients } from "@/db/schema";
 import { desc } from "drizzle-orm";
 import { ClientTable } from "@/components/client-table";
@@ -10,6 +10,7 @@ export default async function ClientsPage() {
   let initialClients: any[] = [];
 
   try {
+    await ensureTablesExist();
     const rows = await db
       .select()
       .from(clients)
@@ -27,7 +28,26 @@ export default async function ClientsPage() {
       createdAt: c.createdAt.toISOString(),
     }));
   } catch (error) {
-    console.error("Failed to load clients:", error);
+    console.error("Failed to load clients from DB:", error);
+  }
+
+  // Merge in-memory clients so no client is ever lost
+  if (memoryClients.size > 0) {
+    for (const mc of memoryClients.values()) {
+      if (!initialClients.some((c) => c.id === mc.id)) {
+        initialClients.unshift({
+          id: mc.id,
+          name: mc.name,
+          status: mc.status,
+          exeName: mc.exeName,
+          cheatName: mc.cheatName,
+          enableAuth: mc.enableAuth,
+          enableMaintenanceCheck: mc.enableMaintenanceCheck,
+          expiresAt: mc.expiresAt ? (mc.expiresAt instanceof Date ? mc.expiresAt.toISOString() : mc.expiresAt) : null,
+          createdAt: mc.createdAt instanceof Date ? mc.createdAt.toISOString() : (mc.createdAt || new Date().toISOString()),
+        });
+      }
+    }
   }
 
   return (

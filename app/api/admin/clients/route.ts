@@ -145,7 +145,13 @@ export async function POST(req: NextRequest) {
       maintenanceTitle: data.maintenanceTitle || "Maintenance Notice",
       maintenanceText: data.maintenanceText || "EXE Under Maintenance. Contact Owner.",
       clientSecret,
-      expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+      expiresAt: (() => {
+        if (data.expiresAt && typeof data.expiresAt === "string" && data.expiresAt.trim() !== "") {
+          const d = new Date(data.expiresAt);
+          return isNaN(d.getTime()) ? null : d;
+        }
+        return null;
+      })(),
       createdAt: new Date(),
       updatedAt: new Date(),
     };

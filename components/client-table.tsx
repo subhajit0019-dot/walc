@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Download,
@@ -36,6 +36,41 @@ export function ClientTable({ initialClients }: { initialClients: ClientItem[] }
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/clients")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.items && Array.isArray(data.items)) {
+          setClients((prev) => {
+            const map = new Map<string, ClientItem>();
+            for (const item of data.items) {
+              map.set(item.id, {
+                id: item.id,
+                name: item.name,
+                status: item.status,
+                exeName: item.exeName,
+                cheatName: item.cheatName,
+                enableAuth: item.enableAuth,
+                enableMaintenanceCheck: item.enableMaintenanceCheck,
+                expiresAt: item.expiresAt,
+                createdAt: item.createdAt,
+              });
+            }
+            try {
+              const local = JSON.parse(localStorage.getItem("cursed_clients") || "[]");
+              for (const l of local) {
+                if (!map.has(l.id)) {
+                  map.set(l.id, l);
+                }
+              }
+            } catch (e) {}
+            return Array.from(map.values());
+          });
+        }
+      })
+      .catch((err) => console.warn("ClientTable sync:", err));
+  }, []);
 
   const filtered = clients.filter((c) => {
     const matchesSearch =

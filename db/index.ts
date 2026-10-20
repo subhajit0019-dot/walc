@@ -50,6 +50,8 @@ export async function ensureTablesExist() {
 
   try {
     const sql = neon(connectionString);
+
+    // 1. Ensure clients table exists
     await sql`
       CREATE TABLE IF NOT EXISTS clients (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -85,22 +87,59 @@ export async function ensureTablesExist() {
         enable_maintenance_check BOOLEAN NOT NULL DEFAULT true,
         maintenance_title TEXT NOT NULL DEFAULT 'Maintenance Notice',
         maintenance_text TEXT NOT NULL DEFAULT 'EXE Under Maintenance. Contact Owner.',
-        client_secret TEXT NOT NULL,
+        client_secret TEXT NOT NULL DEFAULT '',
         expires_at TIMESTAMP WITH TIME ZONE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
       );
     `;
+
+    // 2. Ensure all columns exist in case table was created with earlier schema
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS exe_name TEXT NOT NULL DEFAULT 'Client.exe';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS cheat_name TEXT NOT NULL DEFAULT 'MeowGG';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS title_part1 TEXT NOT NULL DEFAULT 'Meow';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS title_part2 TEXT NOT NULL DEFAULT '.GG';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS window_title TEXT NOT NULL DEFAULT 'MeowGG';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS subtitle TEXT NOT NULL DEFAULT 'Dev : Subhajit | MeowGG';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS loading_text TEXT NOT NULL DEFAULT 'Connecting To DataBase';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS discord_invite_url TEXT NOT NULL DEFAULT 'https://discord.gg/meowgg';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS rpc_enabled BOOLEAN NOT NULL DEFAULT true;`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS rpc_app_id TEXT NOT NULL DEFAULT '1561024986851057715';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS rpc_state TEXT NOT NULL DEFAULT 'MeowGG';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS rpc_details TEXT NOT NULL DEFAULT 'discord.gg/meowgg';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS rpc_large_image TEXT NOT NULL DEFAULT '';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS rpc_large_text TEXT NOT NULL DEFAULT 'MeowGG Community';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS rpc_small_image TEXT NOT NULL DEFAULT '';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS rpc_small_text TEXT NOT NULL DEFAULT 'Developer : Subhajit';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS rpc_button1_label TEXT NOT NULL DEFAULT '<3 Buying Here !';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS rpc_button1_url TEXT NOT NULL DEFAULT 'https://discord.gg/meowgg';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS rpc_button2_label TEXT NOT NULL DEFAULT 'Developer';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS rpc_button2_url TEXT NOT NULL DEFAULT 'https://discord.gg/meowgg';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS enable_auth BOOLEAN NOT NULL DEFAULT true;`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS auth_name TEXT NOT NULL DEFAULT 'all free';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS auth_owner_id TEXT NOT NULL DEFAULT '29B4YqY38s';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS auth_secret TEXT NOT NULL DEFAULT '';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS auth_version TEXT NOT NULL DEFAULT '1.0';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS auth_url TEXT NOT NULL DEFAULT 'https://licenseauth.help/api/1.3/';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS auth_path TEXT DEFAULT '';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS enable_maintenance_check BOOLEAN NOT NULL DEFAULT true;`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS maintenance_title TEXT NOT NULL DEFAULT 'Maintenance Notice';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS maintenance_text TEXT NOT NULL DEFAULT 'EXE Under Maintenance. Contact Owner.';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_secret TEXT NOT NULL DEFAULT '';`;
+    await sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE;`;
+
+    // 3. Ensure checkin_logs table exists
     await sql`
       CREATE TABLE IF NOT EXISTS checkin_logs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+        client_id UUID NOT NULL,
         ip_address TEXT NOT NULL,
         user_agent TEXT,
         status TEXT NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
       );
     `;
+
     tablesInitialized = true;
   } catch (err) {
     console.warn("Auto-create tables skipped/deferred:", err);

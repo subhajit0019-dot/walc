@@ -83,6 +83,7 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [copiedExe, setCopiedExe] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -119,21 +120,38 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
     e.preventDefault();
     setSaving(true);
     setError(null);
+    setSuccess(false);
 
     try {
-      const url = isNew ? "/api/admin/clients" : `/api/admin/clients/${initialData.id}`;
-      const method = isNew ? "POST" : "PATCH";
+      const cleanName = formData.name?.trim() || "";
+      if (!cleanName) {
+        throw new Error("Client Name is required");
+      }
 
-      let cleanExe = formData.exeName.trim();
-      if (!cleanExe.toLowerCase().endsWith(".exe")) {
+      let cleanExe = formData.exeName?.trim() || "";
+      if (!cleanExe) {
+        cleanExe = `${cleanName.replace(/\s+/g, "_")}.exe`;
+      } else if (!cleanExe.toLowerCase().endsWith(".exe")) {
         cleanExe = `${cleanExe}.exe`;
+      }
+
+      let isoExpiresAt: string | null = null;
+      if (formData.expiresAt && typeof formData.expiresAt === "string" && formData.expiresAt.trim() !== "") {
+        const parsed = new Date(formData.expiresAt);
+        if (!isNaN(parsed.getTime())) {
+          isoExpiresAt = parsed.toISOString();
+        }
       }
 
       const payload = {
         ...formData,
+        name: cleanName,
         exeName: cleanExe,
-        expiresAt: formData.expiresAt ? new Date(formData.expiresAt).toISOString() : null,
+        expiresAt: isoExpiresAt,
       };
+
+      const url = isNew ? "/api/admin/clients" : `/api/admin/clients/${initialData.id}`;
+      const method = isNew ? "POST" : "PATCH";
 
       const res = await fetch(url, {
         method,
@@ -155,10 +173,27 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
         throw new Error(errorMsg);
       }
 
-      router.push("/clients");
-      router.refresh();
+      // Save to localStorage as instant client cache
+      try {
+        const savedClient = data.client || {
+          ...payload,
+          id: data.client?.id || initialData?.id || crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+        };
+        const currentList = JSON.parse(localStorage.getItem("cursed_clients") || "[]");
+        const updatedList = [savedClient, ...currentList.filter((c: any) => c.id !== savedClient.id)];
+        localStorage.setItem("cursed_clients", JSON.stringify(updatedList));
+      } catch (storageErr) {}
+
+      setSuccess(true);
+      setTimeout(() => {
+        window.location.href = "/clients";
+      }, 700);
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred");
+      console.error("Client save error:", err);
+      const msg = err.message || "An unexpected error occurred";
+      setError(msg);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSaving(false);
     }
@@ -194,7 +229,7 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
       {/* Form Content */}
-      <form onSubmit={handleSubmit} className="lg:col-span-7 space-y-8">
+      <form noValidate onSubmit={handleSubmit} className="lg:col-span-7 space-y-8">
         {error && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-950/40 p-4 text-sm text-rose-300 flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-rose-400 shrink-0" />
@@ -302,7 +337,6 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
                 value={formData.name}
                 onChange={(e) => updateField("name", e.target.value)}
                 placeholder="e.g. Subhajit"
-                required
               />
             </div>
 
@@ -313,7 +347,6 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
                 value={formData.exeName}
                 onChange={(e) => updateField("exeName", e.target.value)}
                 placeholder="e.g. Subhajit.exe"
-                required
               />
               <p className="text-[10px] text-slate-500 font-mono">
                 Rename your compiled EXE to this name to bind automatically.
@@ -362,7 +395,6 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
                 id="cheatName"
                 value={formData.cheatName}
                 onChange={(e) => updateField("cheatName", e.target.value)}
-                required
               />
             </div>
             <div className="space-y-1.5">
@@ -371,7 +403,6 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
                 id="titlePart1"
                 value={formData.titlePart1}
                 onChange={(e) => updateField("titlePart1", e.target.value)}
-                required
               />
             </div>
             <div className="space-y-1.5">
@@ -380,7 +411,6 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
                 id="titlePart2"
                 value={formData.titlePart2}
                 onChange={(e) => updateField("titlePart2", e.target.value)}
-                required
               />
             </div>
           </div>
@@ -392,7 +422,6 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
                 id="windowTitle"
                 value={formData.windowTitle}
                 onChange={(e) => updateField("windowTitle", e.target.value)}
-                required
               />
             </div>
             <div className="space-y-1.5">
@@ -595,6 +624,20 @@ export function ClientEditorForm({ initialData, isNew = false }: ClientFormProps
             </div>
           </div>
         </div>
+
+        {/* Error / Success Feedback at bottom */}
+        {error && (
+          <div className="rounded-xl border border-rose-500/30 bg-rose-950/60 p-4 text-sm text-rose-300 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-rose-400 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+        {success && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/60 p-4 text-sm text-emerald-300 flex items-center gap-3">
+            <Check className="h-5 w-5 text-emerald-400 shrink-0" />
+            <span>Client saved successfully! Redirecting to fleet list...</span>
+          </div>
+        )}
 
         {/* Submit Actions */}
         <div className="flex items-center justify-end gap-3 pt-4">

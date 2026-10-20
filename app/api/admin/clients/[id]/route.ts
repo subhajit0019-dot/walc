@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, memoryClients } from "@/db";
+import { db, ensureTablesExist, memoryClients } from "@/db";
 import { clients } from "@/db/schema";
 import { clientFormSchema } from "@/lib/validators";
 import { eq } from "drizzle-orm";
@@ -14,6 +14,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     let client = null;
 
     try {
+      await ensureTablesExist();
       const [dbClient] = await db.select().from(clients).where(eq(clients.id, id));
       if (dbClient) client = dbClient;
     } catch (e) {
@@ -40,6 +41,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { id } = await params;
     const body = await req.json();
 
+    try {
+      await ensureTablesExist();
+    } catch (e) {}
+
     const partialSchema = clientFormSchema.partial();
     const result = partialSchema.safeParse(body);
     if (!result.success) {
@@ -55,7 +60,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       updatedAt: new Date(),
     };
     if (data.expiresAt !== undefined) {
-      updateValues.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
+      if (data.expiresAt && typeof data.expiresAt === "string" && data.expiresAt.trim() !== "") {
+        const d = new Date(data.expiresAt);
+        updateValues.expiresAt = isNaN(d.getTime()) ? null : d;
+      } else {
+        updateValues.expiresAt = null;
+      }
     }
 
     let updatedClient = null;
@@ -95,6 +105,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     let deleted = false;
 
     try {
+      await ensureTablesExist();
       const [dbDeleted] = await db.delete(clients).where(eq(clients.id, id)).returning();
       if (dbDeleted) deleted = true;
     } catch (e) {
