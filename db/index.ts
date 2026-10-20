@@ -11,6 +11,7 @@ declare global {
 function createDatabaseConnection() {
   const connectionString =
     process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
     "postgresql://placeholder:placeholder@ep-placeholder.us-east-1.aws.neon.tech/neondb?sslmode=require";
 
   // Optimize for serverless latency
