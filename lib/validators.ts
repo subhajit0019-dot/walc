@@ -64,6 +64,14 @@ export const clientStatusUpdateSchema = z.object({
   status: clientStatusEnum,
 });
 
+export const baseExeRegisterSchema = z.object({
+  version: z.string().optional(),
+  filename: z.string().optional(),
+  fileHash: z.string().optional(),
+  blobUrl: z.string().optional(),
+  fileSize: z.number().optional(),
+});
+
 export const clientCheckRequestSchema = z.object({
   clientId: z.string().min(1, "Client identifier or EXE name is required"),
   timestamp: z.number().int("Timestamp must be integer unix epoch seconds"),
