@@ -1,22 +1,13 @@
 import * as ed from "@noble/ed25519";
-import { sha512 } from "@noble/hashes/sha512";
 import crypto from "crypto";
 import { bytesToHex, hexToBytes } from "./utils";
 
-// Configure ed25519 sha512 synchronous hasher
-if (sha512) {
-  ed.etc.sha512Sync = (...m: Uint8Array[]) => {
-    const h = sha512.create();
-    for (const msg of m) h.update(msg);
-    return h.digest();
-  };
-} else {
-  ed.etc.sha512Sync = (...m: Uint8Array[]) => {
-    const hash = crypto.createHash("sha512");
-    for (const msg of m) hash.update(msg);
-    return new Uint8Array(hash.digest());
-  };
-}
+// Configure ed25519 sha512 synchronous hasher using Node built-in crypto
+ed.etc.sha512Sync = (...m: Uint8Array[]) => {
+  const hash = crypto.createHash("sha512");
+  for (const msg of m) hash.update(msg);
+  return new Uint8Array(hash.digest());
+};
 
 /**
  * Signs a canonical string payload using the Ed25519 private key.
